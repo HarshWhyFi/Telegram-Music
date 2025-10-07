@@ -1,6 +1,6 @@
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultArticle, InputTextMessageContent
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, InlineQueryHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, InlineQueryHandler, ContextTypes
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import yt_dlp
@@ -9,9 +9,9 @@ from typing import Dict, List, Optional
 from cachetools import TTLCache
 import re
 
-# Replace with your actual tokens/keys (URGENT: Get a NEW Telegram token!)
-TELEGRAM_TOKEN = '7938834721:AAFj6sUtlCfH0VPVzUFspINeIrN65goNTLw'  # REPLACE WITH NEW TOKEN FROM BOTFATHER!
-YOUTUBE_API_KEY = 'AIzaSyCZBf20AuQ2KS7M77YBrpCeEW6TZtwDg9A'  # Your provided key—keep private!
+# Replace with your NEW Telegram token (URGENT: Revoke the old one!)
+TELEGRAM_TOKEN = 'YOUR_NEW_TELEGRAM_BOT_TOKEN'  # Get from @BotFather NOW!
+YOUTUBE_API_KEY = 'AIzaSyCZBf20AuQ2KS7M77YBrpCeEW6TZtwDg9A'  # Your key
 
 # Enable logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -26,9 +26,9 @@ search_cache = TTLCache(maxsize=100, ttl=300)
 # In-memory storage
 queues: Dict[int, List[Dict]] = {}
 current_playing: Dict[int, Dict] = {}
-history: Dict[int, List[Dict]] = {}  # {chat_id: List[song info]}
+history: Dict[int, List[Dict]] = {}
 
-# Smart query enhancements: Keyword mappings
+# Smart query enhancements
 MOOD_KEYWORDS = {
     'happy': 'upbeat pop music',
     'sad': 'ballads emotional songs',
@@ -43,36 +43,25 @@ ARTIST_ALIASES = {
 }
 
 def enhance_query(query: str) -> str:
-    """Smartly enhance query with moods, aliases, etc."""
     query_lower = query.lower()
     enhanced = query
-
-    # Alias replacement
     for alias, full in ARTIST_ALIASES.items():
         if alias in query_lower:
             enhanced = re.sub(r'\b' + re.escape(alias) + r'\b', full, enhanced, count=1)
-
-    # Mood detection
     for mood, append in MOOD_KEYWORDS.items():
         if mood in query_lower:
             enhanced += f' {append}'
             break
-
-    # Common additions
     if not any(word in query_lower for word in ['music', 'song', 'official', 'video']):
         enhanced += ' official music video'
-
     return enhanced
 
 async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Test responsiveness."""
-    await update.message.reply_text('🏓 Pong! Bot is alive and responding.')
+    await update.message.reply_text('🏓 Pong! Bot is responding.')
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Smart welcome with trending recommendations."""
     chat_id = update.effective_chat.id
     try:
-        # Get trending music (videoCategoryId=10 for music)
         trending_response = youtube.videos().list(
             part='id,snippet',
             chart='mostPopular',
@@ -80,15 +69,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             maxResults=3,
             regionCode='US'
         ).execute()
-
         recs = []
         for item in trending_response['items']:
             title = item['snippet']['title'][:50]
             video_id = item['id']
             recs.append(f"• {title}\nhttps://youtube.com/watch?v={video_id}")
-
-        rec_text = "\n".join(recs) if recs else "No trends available (check API quota)."
-
+        rec_text = "\n".join(recs) if recs else "No trends available."
         keyboard = [
             [InlineKeyboardButton("🔥 Refresh Trending", callback_data="trending")],
             [InlineKeyboardButton("📜 My History", callback_data="history")],
@@ -97,59 +83,52 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
-            f'🧠 Welcome to Smart Music Bot!\n\n'
-            f'Audio-only streaming from YouTube. Let\'s play!\n\n'
-            f'🔥 Top Trending:\n{rec_text}\n\n'
-            'Commands: /search <query>, /play <url/query>, /history, /ping',
+            f'🧠 Welcome to Smart Music Bot!\n\nAudio-only streaming. Let\'s play!\n\n🔥 Top Trending:\n{rec_text}\n\nCommands: /search, /play, /history, /ping',
             reply_markup=reply_markup,
             parse_mode='Markdown'
         )
     except HttpError as e:
         if e.resp.status in [403, 429]:
-            await update.message.reply_text(f'API Error ({e.resp.status}): Check quota or key restrictions.')
+            await update.message.reply_text(f'API Error ({e.resp.status}): Check quota/key.')
         else:
             logger.error(f"Trending error: {e}")
-            await update.message.reply_text('Welcome! Use /search to start. (Trending failed)')
+            await update.message.reply_text('Welcome! Use /search to start.')
     except Exception as e:
         logger.error(f"Start error: {e}")
-        await update.message.reply_text('Welcome! Bot is responding. Use /search <query> for audio.')
+        await update.message.reply_text('Welcome! Bot ready. Use /search <query> for audio.')
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Enhanced help."""
     help_text = (
-        "🧠 **Smart Music Bot Guide:**\n\n"
-        "**Audio-Only Features:**\n"
-        "- 🔍 **Search**: Top 5 results, play audio streams (no video).\n"
-        "- 🎯 **Recommendations**: Similar audio suggestions.\n"
-        "- 📋 **Queue**: Add/play/skip audio tracks.\n"
-        "- 📜 **History**: Past audio plays.\n\n"
+        "🧠 **Smart Music Bot (Audio Only):** \n\n"
+        "**Features:**\n"
+        "- 🔍 Search: Top 5 audio results.\n"
+        "- 🎯 Recs: Similar audio.\n"
+        "- 📋 Queue: Add/skip audio.\n"
+        "- 📜 History: Past plays.\n\n"
         "**Commands:**\n"
-        "/start - Menu & trending\n"
-        "/search <query> - Top 5 audio search\n"
-        "/play <url or query> - Queue & stream audio\n"
-        "/queue - View queue with controls\n"
-        "/next - Skip to next audio\n"
-        "/history - Past plays\n"
-        "/clear_queue - Reset queue\n"
-        "/ping - Test response\n"
-        "/help - This guide\n\n"
-        "Inline: @yourbot <song> for quick audio search."
+        "/start - Menu\n"
+        "/search <query> - Top 5 audio\n"
+        "/play <query/url> - Queue audio\n"
+        "/queue - View controls\n"
+        "/next - Skip audio\n"
+        "/history - Past\n"
+        "/clear_queue - Reset\n"
+        "/ping - Test\n"
+        "/help - Guide\n\n"
+        "Inline: @bot <song>"
     )
     keyboard = [[InlineKeyboardButton("Test API", callback_data="test_api")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(help_text, reply_markup=reply_markup, parse_mode='Markdown')
 
 async def test_api(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Test the API key."""
     try:
         response = youtube.search().list(q='test', part='id', maxResults=1).execute()
-        await update.message.reply_text('✅ YouTube API Working!')
+        await update.message.reply_text('✅ YouTube API OK!')
     except HttpError as e:
-        error_msg = f'❌ API Error: {e.resp.status} - {e.resp.reason}\nCheck key/quotas.'
-        await update.message.reply_text(error_msg)
+        await update.message.reply_text(f'❌ API Error: {e.resp.status} - {e.resp.reason}')
 
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE, is_inline: bool = False) -> None:
-    """Smart search limited to top 5 audio results."""
     if is_inline:
         query_input = update.inline_query.query.strip()
         chat_id = None
@@ -157,56 +136,52 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE, is_inline: 
         query_input = ' '.join(context.args)
         chat_id = update.effective_chat.id
         if not query_input:
-            await update.message.reply_text('Provide a query, e.g., /search bohemian rhapsody!')
+            await update.message.reply_text('Usage: /search <query>')
             return
-        await update.message.reply_text(f"🧠 Searching top 5 audio for '{query_input}'...")
+        await update.message.reply_text(f"🧠 Top 5 audio for '{query_input}'...")
 
     if not query_input:
         return
 
     query = enhance_query(query_input)
     cache_key = f"search:{query}"
+    enhanced_note = ""
 
     if cache_key in search_cache:
         results = search_cache[cache_key]
-        enhanced_note = " (cached)"
     else:
         try:
             search_response = youtube.search().list(
                 q=query,
                 part='id,snippet',
-                maxResults=5,  # Top 5 only
+                maxResults=5,
                 type='video'
             ).execute()
             results = search_response['items'][:5]
-            if results:
-                search_cache[cache_key] = results
-            else:
+            if not results:
                 fuzzy_query = re.sub(r' official music video$', '', query) + ' audio'
                 fuzzy_response = youtube.search().list(q=fuzzy_query, part='id,snippet', maxResults=5, type='video').execute()
                 results = fuzzy_response['items'][:5]
-                enhanced_note = " (fuzzy match)"
-                if results:
-                    search_cache[cache_key] = results
+                enhanced_note = " (fuzzy)"
+            if results:
+                search_cache[cache_key] = results
         except HttpError as e:
             if e.resp.status in [403, 429]:
-                msg = 'API quota hit. Try later.'
                 if not is_inline:
-                    await update.message.reply_text(msg)
+                    await update.message.reply_text('API quota hit.')
                 return
             raise
         except Exception as e:
             logger.error(f"Search error: {e}")
             if not is_inline:
-                await update.message.reply_text('Search failed. Check API.')
+                await update.message.reply_text('Search failed.')
             return
 
     if not results:
         if not is_inline:
-            await update.message.reply_text(f'No top 5 audio results for "{query_input}". Try another query!')
+            await update.message.reply_text(f'No audio results for "{query_input}".')
         return
 
-    enhanced_note = getattr(locals().get('enhanced_note'), 'value', '') if 'enhanced_note' in locals() else ''
     if not is_inline:
         keyboard = []
         for item in results:
@@ -214,10 +189,10 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE, is_inline: 
             video_id = item['id']['videoId']
             callback_data = f"smart_play:{video_id}:{title}"
             keyboard.append([InlineKeyboardButton(title, callback_data=callback_data)])
-
-        keyboard.append([InlineKeyboardButton("🎯 Recs", callback_data=f"recommend:{results[0]['id']['videoId']}:{query_input}")])
+        if results:
+            keyboard.append([InlineKeyboardButton("🎯 Recs", callback_data=f"recommend:{results[0]['id']['videoId']}:{query_input}")])
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(f"🧠 Top 5 audio results for '{query_input}'{enhanced_note}:", reply_markup=reply_markup)
+        await update.message.reply_text(f"🧠 Top 5 audio{enhanced_note}:", reply_markup=reply_markup)
     else:
         inline_results = []
         for item in results:
@@ -226,7 +201,6 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE, is_inline: 
             link = f"https://www.youtube.com/watch?v={video_id}"
             description = item['snippet']['description'][:80] + '...'
             thumb_url = item['snippet'].get('thumbnails', {}).get('medium', {}).get('url', '')
-
             inline_results.append(
                 InlineQueryResultArticle(
                     id=video_id,
@@ -243,7 +217,6 @@ async def inline_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await search(update, context, is_inline=True)
 
 def get_audio_url(video_url: str) -> tuple[str, str]:
-    """Extract audio stream only."""
     try:
         ydl_opts = {
             'format': 'bestaudio/best[filesize<50M]/bestaudio[ext=m4a]/bestaudio',
@@ -252,50 +225,42 @@ def get_audio_url(video_url: str) -> tuple[str, str]:
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=False)
-            if not info.get('url') or info.get('duration', 0) > 1800:  # Limit to 30 min
+            if not info.get('url') or info.get('duration', 0) > 1800:
                 raise ValueError("Audio too long/unavailable.")
             return info['url'], info.get('title', 'Unknown Audio')
     except Exception as e:
-        logger.error(f"Audio extract error: {e}")
-        raise ValueError("Audio stream failed—skipping.")
+        logger.error(f"Audio error: {e}")
+        raise ValueError("Audio failed—skipping.")
 
 async def smart_play(chat_id: int, video_id: str, title: str, update_or_query, context: ContextTypes.DEFAULT_TYPE, recommend_after: bool = True) -> None:
-    """Stream audio only, update queue/history."""
     video_url = f"https://www.youtube.com/watch?v={video_id}"
     try:
-        await update_or_query.message.reply_text(f"🎧 Streaming audio for '{title}'...")
-
+        await update_or_query.message.reply_text(f"🎧 Streaming audio '{title}'...")
         audio_url, actual_title = get_audio_url(video_url)
-
-        # Send audio message (no video)
         message = await update_or_query.message.reply_audio(
             audio=audio_url,
             title=actual_title or title,
             performer="Audio Bot",
-            caption=f"🎵 {title} (Audio Only)\n🧠 Smart Stream",
+            caption=f"🎵 {title} (Audio Only)",
             duration=0
         )
-
-        # Update state
         current_playing[chat_id] = {'video_id': video_id, 'title': title}
         history.setdefault(chat_id, []).append({'video_id': video_id, 'title': title})
         if len(history[chat_id]) > 50:
             history[chat_id].pop(0)
-
         if recommend_after:
             keyboard = [
-                [InlineKeyboardButton("🎯 More Audio Like This", callback_data=f"recommend:{video_id}:{title}")],
-                [InlineKeyboardButton("➕ Queue Next", callback_data=f"queue_add:{video_id}:{title}")]
+                [InlineKeyboardButton("🎯 More Like This", callback_data=f"recommend:{video_id}:{title}")],
+                [InlineKeyboardButton("➕ Add to Queue", callback_data=f"queue_add:{video_id}:{title}")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await message.reply_text("More audio?", reply_markup=reply_markup)
-
+            await message.reply_text("More?", reply_markup=reply_markup)
     except ValueError as e:
         await update_or_query.message.reply_text(f"⚠️ {str(e)}. Skipping...")
         await next_smart(chat_id, update_or_query, context)
     except Exception as e:
         logger.error(f"Play error: {e}")
-        await update_or_query.message.reply_text('Audio play failed. Try another.')
+        await update_or_query.message.reply_text('Audio failed.')
 
 async def get_recommendations(related_video_id: str, orig_query: str, max_results: int = 3) -> List[Dict]:
     try:
@@ -318,26 +283,74 @@ async def next_smart(chat_id: int, update_or_query, context: ContextTypes.DEFAUL
         queues[chat_id] = queue
         await smart_play(chat_id, next_song['video_id'], next_song['title'], update_or_query, context)
     else:
-        await update_or_query.message.reply_text("Queue empty. Add more with /play!")
+        await update_or_query.message.reply_text("Queue empty.")
 
 async def play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Play or queue audio from query/URL."""
     chat_id = update.effective_chat.id
     if not context.args:
-        await update.message.reply_text('Usage: /play <query or YouTube URL>')
+        await update.message.reply_text('Usage: /play <query or URL>')
         return
-
     arg = ' '.join(context.args)
+    video_id = None
+    title = "Unknown"
     if 'youtube.com/watch?v=' in arg or 'youtu.be/' in arg:
-        # Extract video_id from URL
         match = re.search(r'(?:v=|\/)([0-9A-Za-z_-]{11}).*', arg)
         if match:
             video_id = match.group(1)
-            title = f"Direct Audio {video_id}"
+            title = f"Direct Audio"
         else:
-            await update.message.reply_text('Invalid YouTube URL.')
+            await update.message.reply_text('Invalid URL.')
             return
     else:
-        # Search top 1
         try:
-            search_response = youtube.search().list
+            search_response = youtube.search().list(
+                q=enhance_query(arg),
+                part='id,snippet',
+                maxResults=1,
+                type='video'
+            ).execute()
+            if search_response['items']:
+                item = search_response['items'][0]
+                video_id = item['id']['videoId']
+                title = item['snippet']['title']
+            else:
+                await update.message.reply_text('No results for query.')
+                return
+        except Exception as e:
+            logger.error(f"Play search error: {e}")
+            await update.message.reply_text('Play failed.')
+            return
+
+    if video_id:
+        song = {'video_id': video_id, 'title': title}
+        queue = queues.setdefault(chat_id, [])
+        if not current_playing.get(chat_id) and not queue:
+            await smart_play(chat_id, video_id, title, update, context)
+        else:
+            queue.append(song)
+            await update.message.reply_text(f"➕ Added '{title}' to queue (pos {len(queue)}).")
+    else:
+        await update.message.reply_text('No video ID found.')
+
+async def queue_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.effective_chat.id
+    queue = queues.get(chat_id, [])
+    msg = "📋 Queue:\n"
+    if current_playing.get(chat_id):
+        msg += f"▶️ Now: {current_playing[chat_id]['title']}\n"
+    for i, song in enumerate(queue, 1):
+        msg += f"{i}. {song['title']}\n"
+    if not queue and not current_playing.get(chat_id):
+        msg = "Queue empty."
+    keyboard = [
+        [InlineKeyboardButton("⏭ Next", callback_data="next")],
+        [InlineKeyboardButton("🗑 Clear", callback_data="clear_queue")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(msg, reply_markup=reply_markup)
+
+async def next_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.effective_chat.id
+    await next_smart(chat_id, update, context)
+
+async def history_command(update: Update, context:
