@@ -10,7 +10,7 @@ from cachetools import TTLCache
 import re
 
 # Replace with your actual tokens/keys
-TELEGRAM_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN'
+TELEGRAM_TOKEN = '7938834721:AAFj6sUtlCfH0VPVzUFspINeIrN65goNTLw'
 YOUTUBE_API_KEY = 'AIzaSyCZBf20AuQ2KS7M77YBrpCeEW6TZtwDg9A'  # Your provided key—keep private!
 
 # Enable logging
