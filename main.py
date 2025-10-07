@@ -9,6 +9,12 @@ from telegram.ext import (
     ContextTypes,
 )
 
+# === TERMUX / PYTHON 3.13 PATCH ===
+# Fix AttributeError in PTB 20.x with Python 3.13
+import telegram.ext._updater as _u
+if not hasattr(_u.Updater, "_Updater__polling_cleanup_cb"):
+    _u.Updater._Updater__polling_cleanup_cb = None
+
 # === BOT TOKEN ===
 BOT_TOKEN = "7688931396:AAFCDZNlkOuYPn2aWVqZN2GOaYDX73Yfn8A"
 
@@ -35,7 +41,6 @@ conn.commit()
 
 # === COMMAND HANDLERS ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /start command."""
     user = update.effective_user
     chat = update.effective_chat
     group_name = chat.title if chat.title else "this chat"
@@ -44,7 +49,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def show_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show user ID and chat ID."""
     user = update.effective_user
     chat = update.effective_chat
     await update.message.reply_text(
@@ -55,14 +59,13 @@ async def show_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # === JOIN / LEAVE HANDLER ===
 async def greet_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Greet or say goodbye to users."""
     result = update.chat_member
     chat = result.chat
     old_status = result.old_chat_member.status
     new_status = result.new_chat_member.status
     user = result.new_chat_member.user
 
-    # --- User joined ---
+    # User joined
     if old_status in ["left", "kicked"] and new_status == "member":
         user_id = user.id
         name = user.first_name
@@ -87,7 +90,7 @@ async def greet_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await chat.send_message(msg)
 
-    # --- User left ---
+    # User left
     elif new_status in ["left", "kicked"]:
         name = result.old_chat_member.user.first_name
         await chat.send_message(f"👋 {name} has left {chat.title or 'the group'}.")
@@ -103,7 +106,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("id", show_id))
 
-    # Member Updates
+    # Member updates
     app.add_handler(ChatMemberHandler(greet_user, ChatMemberHandler.CHAT_MEMBER))
 
     print("✅ Bot is running! Press Ctrl+C to stop.")
