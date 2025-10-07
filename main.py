@@ -10,7 +10,7 @@ from telegram.ext import (
 
 # === CONFIGURATION ===
 BOT_TOKEN = "7688931396:AAFCDZNlkOuYPn2aWVqZN2GOaYDX73Yfn8A"   # Replace with your bot token
-WELCOME_IMAGE = "i.jpg"    # Local image path (your uploaded image)
+WELCOME_IMAGE = "IMG_20251003_154503.png"    # Local image path (your uploaded image)
 USER_LOG_FILE = "users_data.txt"    # File to store user info
 
 # === LOGGING SETUP ===
