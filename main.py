@@ -1,18 +1,13 @@
 import os
 import logging
 import sqlite3
-import pytz
-from datetime import datetime
 from telegram import Update, ChatMember
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
-    ContextTypes,
     ChatMemberHandler,
+    ContextTypes,
 )
-
-# === FIX TERMUX TIMEZONE BUG ===
-os.environ["TZ"] = "UTC"
 
 # === BOT TOKEN ===
 BOT_TOKEN = "7688931396:AAFCDZNlkOuYPn2aWVqZN2GOaYDX73Yfn8A"
@@ -38,17 +33,18 @@ cur.execute(
 conn.commit()
 
 
+# === COMMAND HANDLERS ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Respond to /start command."""
+    """Handle /start command."""
     user = update.effective_user
     chat = update.effective_chat
-    await update.message.reply_text(
-        f"Hey there {user.first_name}, and welcome to {chat.title or 'this chat'}! 👋\nHow are you today?"
-    )
+    group_name = chat.title if chat.title else "this chat"
+    msg = f"Hey there {user.first_name}, and welcome to {group_name}! 👋\nHow are you today?"
+    await update.message.reply_text(msg)
 
 
 async def show_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show user and chat ID."""
+    """Show user ID and chat ID."""
     user = update.effective_user
     chat = update.effective_chat
     await update.message.reply_text(
@@ -57,23 +53,25 @@ async def show_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+# === JOIN / LEAVE HANDLER ===
 async def greet_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Welcome or farewell when members join/leave."""
+    """Greet or say goodbye to users."""
     result = update.chat_member
     chat = result.chat
-    new = result.new_chat_member
-    old = result.old_chat_member
+    old_status = result.old_chat_member.status
+    new_status = result.new_chat_member.status
+    user = result.new_chat_member.user
 
-    # User joined
-    if old.status in ["left", "kicked"] and new.status == "member":
-        user_id = new.user.id
-        name = new.user.first_name
+    # --- User joined ---
+    if old_status in ["left", "kicked"] and new_status == "member":
+        user_id = user.id
+        name = user.first_name
 
         cur.execute("SELECT joined_times FROM users WHERE user_id=?", (user_id,))
-        row = cur.fetchone()
+        data = cur.fetchone()
 
-        if row:
-            joined_times = row[0] + 1
+        if data:
+            joined_times = data[0] + 1
             cur.execute(
                 "UPDATE users SET joined_times=? WHERE user_id=?", (joined_times, user_id)
             )
@@ -89,23 +87,26 @@ async def greet_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await chat.send_message(msg)
 
-    # User left
-    elif new.status in ["left", "kicked"]:
-        name = old.user.first_name
+    # --- User left ---
+    elif new_status in ["left", "kicked"]:
+        name = result.old_chat_member.user.first_name
         await chat.send_message(f"👋 {name} has left {chat.title or 'the group'}.")
 
 
+# === MAIN FUNCTION ===
 def main():
+    print("🚀 Bot is starting...")
+
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     # Commands
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("id", show_id))
 
-    # Join/Leave events
+    # Member Updates
     app.add_handler(ChatMemberHandler(greet_user, ChatMemberHandler.CHAT_MEMBER))
 
-    print("✅ Bot is running... Press Ctrl+C to stop.")
+    print("✅ Bot is running! Press Ctrl+C to stop.")
     app.run_polling()
 
 
