@@ -1,3 +1,9 @@
+# === TERMUX TIMEZONE FIX ===
+import pytz
+import os
+os.environ["TZ"] = "UTC"
+
+# === STANDARD IMPORTS ===
 import logging
 from datetime import datetime
 from telegram import Update
@@ -9,9 +15,9 @@ from telegram.ext import (
 )
 
 # === CONFIGURATION ===
-BOT_TOKEN = "7688931396:AAFCDZNlkOuYPn2aWVqZN2GOaYDX73Yfn8A"   # Replace with your bot token
-WELCOME_IMAGE = "IMG_20251003_154503.png"    # Local image path (your uploaded image)
-USER_LOG_FILE = "users_data.txt"    # File to store user info
+BOT_TOKEN = "7688931396:AAFCDZNlkOuYPn2aWVqZN2GOaYDX73Yfn8A"   # 🔹 Replace with your bot token
+WELCOME_IMAGE = "IMG_20251003_154503.png"    # 🔹 Your welcome image file path
+USER_LOG_FILE = "users_data.txt"    # 🔹 Text file for storing user info
 
 # === LOGGING SETUP ===
 logging.basicConfig(
@@ -28,10 +34,11 @@ async def send_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = member.user
         chat = update.chat_member.chat
 
+        # Only trigger when a new member joins
         if member.status == "member":
             group_name = chat.title or "this group"
 
-            # Prepare welcome message
+            # Styled welcome message
             welcome_text = f"""
 ╭──────────────────────────────╮
 ⚡ *WELCOME TO {group_name.upper()}* ⚡
@@ -48,7 +55,7 @@ async def send_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ╰──────────────────────────────╯
 """
 
-            # Send welcome image + caption
+            # Send photo + welcome message
             await context.bot.send_photo(
                 chat_id=chat.id,
                 photo=open(WELCOME_IMAGE, "rb"),
@@ -56,7 +63,7 @@ async def send_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown"
             )
 
-            # Save user data to text file
+            # Store user data
             with open(USER_LOG_FILE, "a", encoding="utf-8") as f:
                 f.write(
                     f"Name: {user.full_name}\n"
@@ -88,7 +95,7 @@ async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"/id command used by {user.full_name} ({user.id}) in {chat.title}")
 
 
-# === MAIN BOT APP ===
+# === MAIN FUNCTION ===
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
