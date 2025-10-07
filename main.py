@@ -1,19 +1,7 @@
-import os
 import logging
 import sqlite3
 from telegram import Update, ChatMember
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    ChatMemberHandler,
-    ContextTypes,
-)
-
-# === TERMUX / PYTHON 3.13 PATCH ===
-# Fix AttributeError in PTB 20.x with Python 3.13
-import telegram.ext._updater as _u
-if not hasattr(_u.Updater, "_Updater__polling_cleanup_cb"):
-    _u.Updater._Updater__polling_cleanup_cb = None
+from telegram.ext import ApplicationBuilder, CommandHandler, ChatMemberHandler, ContextTypes
 
 # === BOT TOKEN ===
 BOT_TOKEN = "7688931396:AAFCDZNlkOuYPn2aWVqZN2GOaYDX73Yfn8A"
@@ -21,43 +9,40 @@ BOT_TOKEN = "7688931396:AAFCDZNlkOuYPn2aWVqZN2GOaYDX73Yfn8A"
 # === LOGGING ===
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
+    level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
 # === DATABASE ===
-DB_FILE = "users.db"
-conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+conn = sqlite3.connect("users.db", check_same_thread=False)
 cur = conn.cursor()
-cur.execute(
-    """CREATE TABLE IF NOT EXISTS users (
-        user_id INTEGER PRIMARY KEY,
-        first_name TEXT,
-        joined_times INTEGER DEFAULT 0
-    )"""
+cur.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    user_id INTEGER PRIMARY KEY,
+    first_name TEXT,
+    joined_times INTEGER DEFAULT 0
 )
+""")
 conn.commit()
 
-
-# === COMMAND HANDLERS ===
+# === COMMANDS ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     chat = update.effective_chat
     group_name = chat.title if chat.title else "this chat"
-    msg = f"Hey there {user.first_name}, and welcome to {group_name}! 👋\nHow are you today?"
-    await update.message.reply_text(msg)
-
+    await update.message.reply_text(
+        f"Hey there {user.first_name}, and welcome to {group_name}! 👋\nHow are you today?"
+    )
 
 async def show_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     chat = update.effective_chat
     await update.message.reply_text(
         f"👤 Your ID: `{user.id}`\n💬 Chat ID: `{chat.id}`",
-        parse_mode="Markdown",
+        parse_mode="Markdown"
     )
 
-
-# === JOIN / LEAVE HANDLER ===
+# === JOIN / LEAVE EVENTS ===
 async def greet_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = update.chat_member
     chat = result.chat
@@ -75,16 +60,11 @@ async def greet_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if data:
             joined_times = data[0] + 1
-            cur.execute(
-                "UPDATE users SET joined_times=? WHERE user_id=?", (joined_times, user_id)
-            )
+            cur.execute("UPDATE users SET joined_times=? WHERE user_id=?", (joined_times, user_id))
             conn.commit()
             msg = f"🎉 Welcome back {name}! You've rejoined {chat.title or 'the group'} {joined_times} times!"
         else:
-            cur.execute(
-                "INSERT INTO users (user_id, first_name, joined_times) VALUES (?, ?, ?)",
-                (user_id, name, 1),
-            )
+            cur.execute("INSERT INTO users (user_id, first_name, joined_times) VALUES (?, ?, ?)", (user_id, name, 1))
             conn.commit()
             msg = f"Hey there {name}, and welcome to {chat.title or 'the group'}! 💫"
 
@@ -95,23 +75,17 @@ async def greet_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         name = result.old_chat_member.user.first_name
         await chat.send_message(f"👋 {name} has left {chat.title or 'the group'}.")
 
-
 # === MAIN FUNCTION ===
 def main():
-    print("🚀 Bot is starting...")
-
+    print("🚀 Bot starting...")
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Commands
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("id", show_id))
-
-    # Member updates
     app.add_handler(ChatMemberHandler(greet_user, ChatMemberHandler.CHAT_MEMBER))
 
-    print("✅ Bot is running! Press Ctrl+C to stop.")
+    print("✅ Bot running. Press Ctrl+C to stop.")
     app.run_polling()
-
 
 if __name__ == "__main__":
     main()
