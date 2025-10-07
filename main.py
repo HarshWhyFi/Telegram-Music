@@ -1,126 +1,118 @@
-import os
 import logging
-from datetime import datetime
-from random import choice
-from telegram import Update, ChatMember
+import sqlite3
+from telegram import Update, ChatMember, ChatMemberUpdated
 from telegram.ext import (
     ApplicationBuilder,
-    ChatMemberHandler,
     CommandHandler,
     ContextTypes,
+    ChatMemberHandler,
 )
+import os
 from dotenv import load_dotenv
 
-# === LOAD ENV VARIABLES ===
+# === Load environment variables ===
 load_dotenv()
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN environment variable not set!")
+TOKEN = os.getenv("BOT_TOKEN")
 
-# === CONFIGURATION ===
-WELCOME_IMAGES = ["IMG_20251003_154503.png", "welcome2.jpg", "welcome3.jpg"]
-USER_LOG_FILE = "users_data.txt"
-
-# === LOGGING SETUP ===
+# === Logging ===
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# === HELPER FUNCTIONS ===
-def is_new_member(update: Update) -> bool:
-    """Check if the user just joined the group."""
-    change = update.chat_member.difference().get("status")
-    return change and change[0] in [ChatMember.LEFT, ChatMember.KICKED] and change[1] == ChatMember.MEMBER
+# === Database setup ===
+def init_db():
+    conn = sqlite3.connect("users.db")
+    c = conn.cursor()
+    c.execute(
+        """CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER,
+            chat_id INTEGER,
+            username TEXT,
+            first_joined INTEGER DEFAULT 1
+        )"""
+    )
+    conn.commit()
+    conn.close()
 
-def escape_markdown(text: str) -> str:
-    """Escape special Markdown characters."""
-    escape_chars = "_*[]()~`>#+-=|{}.!"
-    for char in escape_chars:
-        text = text.replace(char, f"\\{char}")
-    return text
+def user_exists(user_id, chat_id):
+    conn = sqlite3.connect("users.db")
+    c = conn.cursor()
+    c.execute("SELECT * FROM users WHERE user_id=? AND chat_id=?", (user_id, chat_id))
+    data = c.fetchone()
+    conn.close()
+    return data
 
-# === WELCOME FUNCTION ===
-async def send_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        if not is_new_member(update):
-            return
+def add_or_update_user(user_id, chat_id, username):
+    conn = sqlite3.connect("users.db")
+    c = conn.cursor()
+    if user_exists(user_id, chat_id):
+        c.execute("UPDATE users SET first_joined = 0 WHERE user_id=? AND chat_id=?", (user_id, chat_id))
+    else:
+        c.execute("INSERT INTO users (user_id, chat_id, username, first_joined) VALUES (?, ?, ?, 1)",
+                  (user_id, chat_id, username))
+    conn.commit()
+    conn.close()
 
-        member = update.chat_member.new_chat_member
-        user = member.user
-        chat = update.chat_member.chat
-        group_name = chat.title or "this group"
+def remove_user(user_id, chat_id):
+    conn = sqlite3.connect("users.db")
+    c = conn.cursor()
+    c.execute("DELETE FROM users WHERE user_id=? AND chat_id=?", (user_id, chat_id))
+    conn.commit()
+    conn.close()
 
-        # Pick a random welcome image
-        image_path = choice(WELCOME_IMAGES)
-        if not os.path.exists(image_path):
-            logger.warning(f"Image not found: {image_path}")
-            return
+# === Commands ===
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    chat = update.effective_chat
 
-        # Escape user input for Markdown
-        full_name = escape_markdown(user.full_name)
-        username = escape_markdown(user.username) if user.username else "N/A"
-        first_name = escape_markdown(user.first_name)
+    add_or_update_user(user.id, chat.id, user.username)
 
-        welcome_text = f"""
-╭──────────────────────────────╮
-⚡ *WELCOME TO {escape_markdown(group_name.upper())}* ⚡
-╰──────────────────────────────╯
+    chat_name = chat.title if chat.title else "this chat"
+    message = f"🎉 Hey there {user.first_name}, and welcome to *{chat_name}*! How are you?"
+    await update.message.reply_text(message, parse_mode="Markdown")
 
-🌿 *NAME*      : {full_name}
-🌿 *USERNAME*  : @{username}
-🌿 *USER ID*   : `{user.id}`
-🌿 *MENTION*   : [{first_name}](tg://user?id={user.id})
-🌿 *CHAT*      : {escape_markdown(group_name)}
+async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    chat = update.effective_chat
+    await update.message.reply_text(
+        f"👤 **Your ID:** `{user.id}`\n💬 **Chat ID:** `{chat.id}`",
+        parse_mode="Markdown"
+    )
 
-╭──────────────────────────────╮
-⚡ *THANKS FOR JOINING* ⚡
-╰──────────────────────────────╯
-"""
+# === Chat Member Updates ===
+async def track_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    result = update.chat_member
+    member = result.new_chat_member
+    chat = update.effective_chat
 
-        # Send photo + message
-        with open(image_path, "rb") as photo:
-            await context.bot.send_photo(
-                chat_id=chat.id,
-                photo=photo,
-                caption=welcome_text,
-                parse_mode="Markdown"
-            )
+    user_id = member.user.id
+    username = member.user.username or member.user.first_name
+    chat_name = chat.title or "this chat"
 
-        # Store user info
-        with open(USER_LOG_FILE, "a", encoding="utf-8") as f:
-            f.write(
-                f"Name: {user.full_name}\n"
-                f"Username: @{user.username if user.username else 'N/A'}\n"
-                f"User ID: {user.id}\n"
-                f"Chat: {group_name}\n"
-                f"Joined At: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-                f"{'-'*40}\n"
-            )
+    if member.status == ChatMember.MEMBER:  # User joined
+        existed = user_exists(user_id, chat.id)
+        add_or_update_user(user_id, chat.id, username)
+        if existed:
+            msg = f"👋 Welcome back, {member.user.first_name}! Glad to see you again in *{chat_name}*."
+        else:
+            msg = f"🎉 Hey there {member.user.first_name}, and welcome to *{chat_name}*! How are you?"
+        await context.bot.send_message(chat.id, msg, parse_mode="Markdown")
 
-        logger.info(f"✅ Welcomed {user.full_name} ({user.id}) in {group_name}")
+    elif member.status in [ChatMember.LEFT, ChatMember.KICKED]:  # User left
+        remove_user(user_id, chat.id)
+        logger.info(f"User {username} left {chat_name}")
 
-    except Exception as e:
-        logger.error(f"Error in send_welcome: {e}")
-
-# === /id COMMAND ===
-async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        user = update.effective_user
-        chat = update.effective_chat
-        reply_text = f"🆔 *Your Info:*\n• *User ID:* `{user.id}`\n• *Chat ID:* `{chat.id}`"
-        await update.message.reply_text(reply_text, parse_mode="Markdown")
-        logger.info(f"/id used by {user.full_name} ({user.id}) in {chat.title}")
-    except Exception as e:
-        logger.error(f"Error in /id command: {e}")
-
-# === MAIN FUNCTION ===
+# === Main ===
 def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(ChatMemberHandler(send_welcome, ChatMemberHandler.CHAT_MEMBER))
-    app.add_handler(CommandHandler("id", get_id))
-    logger.info("🤖 Bot is running and ready!")
+    init_db()
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("id", id_command))
+    app.add_handler(ChatMemberHandler(track_members, ChatMemberHandler.CHAT_MEMBER))
+
+    logger.info("Bot is running...")
     app.run_polling()
 
 if __name__ == "__main__":
