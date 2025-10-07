@@ -18,7 +18,7 @@ if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN environment variable not set!")
 
 # === CONFIGURATION ===
-WELCOME_IMAGES = ["1000050937.jpg", "welcome2.jpg", "welcome3.jpg"]
+WELCOME_IMAGES = ["IMG_20251003_154503.png", "welcome2.jpg", "welcome3.jpg"]
 USER_LOG_FILE = "users_data.txt"
 
 # === LOGGING SETUP ===
